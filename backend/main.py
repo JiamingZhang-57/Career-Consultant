@@ -1,15 +1,18 @@
 from pathlib import Path
 from uuid import uuid4
-from pydantic import BaseModel, Field
 import chromadb
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sentence_transformers import SentenceTransformer
-import pymupdf
+from pdf_parser import PdfParsingError, parse_pdf
+from chunking import split_resume_sections
+from job_ingestion import JobPageError, extract_job_content, fetch_job_html
+
+from schemas import EvidenceRequest, JobUrlRequest, SearchRequest
 
 app = FastAPI(title="Career Intelligence API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000" ], allow_credentials=True, allow_methods=["*"],  allow_headers=["*"])
-MAX_FILE_SIZE = 10 * 1024 * 1024
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CHROMA_PATH = PROJECT_ROOT / "data" / "chroma"
 CHROMA_PATH.mkdir(parents=True, exist_ok=True)
@@ -22,17 +25,6 @@ def get_embedding_model():
     if _embedding_model is None:
         _embedding_model = SentenceTransformer( "all-MiniLM-L6-v2")
     return _embedding_model
-
-class SearchRequest(BaseModel):
-    query: str = Field(min_length=1)
-    top_k: int = Field(default=5, ge=1, le=10)
-    document_id: str | None = None
-    document_type: str | None = None
-
-class EvidenceRequest(BaseModel):
-    requirement: str = Field(min_length=1)
-    resume_document_id: str | None = None
-    top_k: int = Field(default=3, ge=1, le=10)
 
 def chunk_text(text: str, max_chars: int = 1200, overlap: int = 150):
     """
@@ -58,36 +50,33 @@ def chunk_text(text: str, max_chars: int = 1200, overlap: int = 150):
 def health_check():
     return {"status": "ok", "service": "career-intelligence-api"}
 
-@app.post("/documents/parse")
-async def parse_document(file: UploadFile = File(...)):
+@app.post(
+    "/documents/parse",
+    include_in_schema=False,
+)
+async def parse_document(
+    file: UploadFile = File(...),
+):
     filename = file.filename or "uploaded-file"
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
     file_content = await file.read()
-    if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException( status_code=413, detail="File is too large. Maximum size is 10 MB.")
-    if not file_content.startswith(b"%PDF"):
-        raise HTTPException(status_code=400, detail="The uploaded file does not appear to be a valid PDF.")
+
     try:
-        document = pymupdf.open(stream=file_content, filetype="pdf")
-        pages = []
-        for page_index in range(document.page_count):
-            page_text = document[page_index].get_text("text").strip()
-            pages.append({ "page_number": page_index + 1, "text": page_text})
-        page_count = document.page_count
-        document.close()
-    except Exception as error:
-        raise HTTPException(status_code=400, detail=f"Could not parse PDF: {error}") from error
-    full_text = "\n\n".join(page["text"] for page in pages if page["text"])
-    chunks = chunk_text(full_text)
+        parsed_document = parse_pdf(
+            filename=filename,
+            file_content=file_content,
+        )
+    except PdfParsingError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=str(error),
+        ) from error
+
+    chunks = chunk_text(parsed_document["text"])
+
     return {
-        "filename": filename,
-        "page_count": page_count,
-        "character_count": len(full_text),
-        "text": full_text,
-        "pages": pages,
+        **parsed_document,
         "chunk_count": len(chunks),
-        "chunks": chunks
+        "chunks": chunks,
     }
 
 @app.post("/documents/index")
@@ -119,7 +108,7 @@ async def index_document(file: UploadFile = File(...), document_type: str = Form
         "embedding_model": "all-MiniLM-L6-v2"
     }
 
-@app.post("/search")
+@app.post("/search", include_in_schema=False)
 def search_documents(request: SearchRequest):
     """
     Here the distance indicates the spatial distance between requests and chunks in the embedding space.
@@ -149,7 +138,7 @@ def search_documents(request: SearchRequest):
         matches.append({ "text": document, "metadata": metadata, "distance": distance, "similarity": max(0.0, min(1.0, 1 - distance)) })
     return {"query": request.query, "result_count": len(matches), "matches": matches}
 
-@app.post("/requirements/evidence")
+@app.post("/requirements/evidence", include_in_schema=False)
 def retrieve_requirement_evidence(request: EvidenceRequest):
     search_request = SearchRequest(
         query=request.requirement,
@@ -158,3 +147,57 @@ def retrieve_requirement_evidence(request: EvidenceRequest):
         document_type="resume")
     search_results = search_documents(search_request)
     return {"requirement": request.requirement, "resume_document_id": request.resume_document_id, "evidence": search_results["matches"]}
+
+
+@app.post("/jobs/from-url/preview")
+async def preview_job_from_url(
+    request: JobUrlRequest,
+):
+    try:
+        final_url, html = await fetch_job_html(request.url)
+        job = extract_job_content(html)
+    except JobPageError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    if len(job["text"]) < 200:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Unable to extract a job description from this URL. "
+                "Please provide a public company career-page URL."
+            ),
+        )
+
+    chunks = chunk_text(job["text"])
+
+    return {
+        "source_url": final_url,
+        "title": job["title"],
+        "company": job["company"],
+        "location": job["location"],
+        "employment_type": job["employment_type"],
+        "extraction_method": job["extraction_method"],
+        "character_count": len(job["text"]),
+        "chunk_count": len(chunks),
+        "chunks": chunks,
+    }
+
+@app.post("/documents/resume-structure", include_in_schema=False)
+async def preview_resume_structure(
+    file: UploadFile = File(...),
+):
+    parsed_document = await parse_document(file)
+
+    sections = split_resume_sections(
+        parsed_document["pages"]
+    )
+
+    return {
+        "filename": parsed_document["filename"],
+        "page_count": parsed_document["page_count"],
+        "section_count": len(sections),
+        "sections": sections,
+    }
