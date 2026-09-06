@@ -1,30 +1,14 @@
-from pathlib import Path
 from uuid import uuid4
-import chromadb
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from sentence_transformers import SentenceTransformer
 from pdf_parser import PdfParsingError, parse_pdf
 from chunking import split_resume_sections
 from job_ingestion import JobPageError, extract_job_content, fetch_job_html
-
+from vector_store import EMBEDDING_MODEL_NAME, add_chunks, search_chunks
 from schemas import EvidenceRequest, JobUrlRequest, SearchRequest
 
 app = FastAPI(title="Career Intelligence API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000" ], allow_credentials=True, allow_methods=["*"],  allow_headers=["*"])
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CHROMA_PATH = PROJECT_ROOT / "data" / "chroma"
-CHROMA_PATH.mkdir(parents=True, exist_ok=True)
-chroma_client = chromadb.PersistentClient(path=str(CHROMA_PATH))
-chunks_collection = chroma_client.get_or_create_collection(name="document_chunks", metadata={"hnsw:space": "cosine"})
-_embedding_model = None
-
-def get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        _embedding_model = SentenceTransformer( "all-MiniLM-L6-v2")
-    return _embedding_model
 
 def chunk_text(text: str, max_chars: int = 1200, overlap: int = 150):
     """
@@ -98,45 +82,48 @@ async def index_document(file: UploadFile = File(...), document_type: str = Form
         } for chunk in chunks
                 ]
 
-    chunks_collection.add(ids=ids, documents=texts, embeddings=embeddings, metadatas=metadatas)
+    add_chunks(ids=ids, texts=texts, metadatas=metadatas)
 
     return {
         "document_id": document_id,
         "filename": parsed_document["filename"],
         "document_type": document_type,
         "chunk_count": len(chunks),
-        "embedding_model": "all-MiniLM-L6-v2"
+        "embedding_model": EMBEDDING_MODEL_NAME
     }
 
 @app.post("/search", include_in_schema=False)
 def search_documents(request: SearchRequest):
-    """
-    Here the distance indicates the spatial distance between requests and chunks in the embedding space.
-    The similarity lower, more close semantically
-    """
-    model = get_embedding_model()
-    query_embedding = model.encode([request.query], normalize_embeddings=True).tolist()[0]
     filters = []
+
     if request.document_id:
-        filters.append({"document_id": request.document_id})
+        filters.append(
+            {"document_id": request.document_id}
+        )
+
     if request.document_type:
-        filters.append({"document_type": request.document_type})
+        filters.append(
+            {"document_type": request.document_type}
+        )
+
     where = None
+
     if len(filters) == 1:
         where = filters[0]
     elif len(filters) > 1:
         where = {"$and": filters}
-    query_arguments = {"query_embeddings": [query_embedding], "n_results": request.top_k, "include": [ "documents", "metadatas", "distances"]}
-    if where:
-        query_arguments["where"] = where
-    results = chunks_collection.query(**query_arguments)
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-    distances = results["distances"][0]
-    matches = []
-    for document, metadata, distance in zip(documents, metadatas, distances):
-        matches.append({ "text": document, "metadata": metadata, "distance": distance, "similarity": max(0.0, min(1.0, 1 - distance)) })
-    return {"query": request.query, "result_count": len(matches), "matches": matches}
+
+    matches = search_chunks(
+        query=request.query,
+        top_k=request.top_k,
+        where=where,
+    )
+
+    return {
+        "query": request.query,
+        "result_count": len(matches),
+        "matches": matches,
+    }
 
 @app.post("/requirements/evidence", include_in_schema=False)
 def retrieve_requirement_evidence(request: EvidenceRequest):
