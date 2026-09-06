@@ -29,6 +29,11 @@ class SearchRequest(BaseModel):
     document_id: str | None = None
     document_type: str | None = None
 
+class EvidenceRequest(BaseModel):
+    requirement: str = Field(min_length=1)
+    resume_document_id: str | None = None
+    top_k: int = Field(default=3, ge=1, le=10)
+
 def chunk_text(text: str, max_chars: int = 1200, overlap: int = 150):
     """
     Chunking the texts for the information Retrieval
@@ -143,3 +148,13 @@ def search_documents(request: SearchRequest):
     for document, metadata, distance in zip(documents, metadatas, distances):
         matches.append({ "text": document, "metadata": metadata, "distance": distance, "similarity": max(0.0, min(1.0, 1 - distance)) })
     return {"query": request.query, "result_count": len(matches), "matches": matches}
+
+@app.post("/requirements/evidence")
+def retrieve_requirement_evidence(request: EvidenceRequest):
+    search_request = SearchRequest(
+        query=request.requirement,
+        top_k=request.top_k,
+        document_id=request.resume_document_id,
+        document_type="resume")
+    search_results = search_documents(search_request)
+    return {"requirement": request.requirement, "resume_document_id": request.resume_document_id, "evidence": search_results["matches"]}
