@@ -111,3 +111,31 @@ def search_chunks(
         )
 
     return matches
+
+def get_chunks(
+    where: dict,
+) -> list[dict]:
+    results = _collection.get(
+        where=where,
+        include=[
+            "documents",
+            "metadatas",
+        ],
+    )
+
+    ids = results.get("ids") or []
+    documents = results.get("documents") or []
+    metadatas = results.get("metadatas") or []
+
+    return [
+        {
+            "id": record_id,
+            "text": document,
+            "metadata": metadata,
+        }
+        for record_id, document, metadata in zip(
+            ids,
+            documents,
+            metadatas,
+        )
+    ]

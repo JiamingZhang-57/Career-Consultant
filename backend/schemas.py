@@ -16,3 +16,12 @@ class EvidenceRequest(BaseModel):
     requirement: str = Field(min_length=1)
     resume_document_id: str | None = None
     top_k: int = Field(default=3, ge=1, le=10)
+
+class AnalysisRequest(BaseModel):
+    resume_document_id: str
+    job_id: str
+    top_k: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+    )

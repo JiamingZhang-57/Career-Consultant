@@ -7,8 +7,8 @@ from job_ingestion import JobPageError
 from job_service import ingest_job_url
 from vector_store import search_chunks
 from resume_ingestion import ingest_resume
-from schemas import EvidenceRequest, JobUrlRequest, SearchRequest
-
+from matching_service import build_evidence_matrix
+from schemas import AnalysisRequest, EvidenceRequest, JobUrlRequest, SearchRequest
 
 app = FastAPI(title="Career Intelligence API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000" ], allow_credentials=True, allow_methods=["*"],  allow_headers=["*"])
@@ -175,3 +175,24 @@ async def preview_resume_structure(
         "evidence_chunk_count": len(evidence_chunks),
         "evidence_chunks": evidence_chunks,
     }
+
+@app.post(
+    "/analyses",
+    tags=["Analysis"],
+)
+def create_analysis(
+    request: AnalysisRequest,
+):
+    try:
+        return build_evidence_matrix(
+            resume_document_id=(
+                request.resume_document_id
+            ),
+            job_id=request.job_id,
+            top_k=request.top_k,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=404,
+            detail=str(error),
+        ) from error
