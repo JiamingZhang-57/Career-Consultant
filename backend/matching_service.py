@@ -135,6 +135,9 @@ def build_evidence_matrix(
             result["explanation"] = decision[
                 "explanation"
             ]
+            result["guardrail_applied"] = decision[
+                "guardrail_applied"
+            ]
 
     return {
         "resume_document_id": resume_document_id,

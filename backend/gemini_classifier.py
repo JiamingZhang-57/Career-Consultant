@@ -183,30 +183,32 @@ def classify_requirements(
             in allowed_chunks[decision.requirement_id]
         ]
 
-        if (
-            decision.classification
-            == "not_evidenced_in_resume"
-        ):
+        classification = decision.classification
+        confidence = round(decision.confidence, 3)
+        explanation = decision.explanation
+        guardrail_applied = False
+
+        if classification == "not_evidenced_in_resume":
             valid_chunk_ids = []
 
-        if (
-            decision.classification
-            != "not_evidenced_in_resume"
-            and not valid_chunk_ids
-        ):
-            raise RuntimeError(
-                "Gemini returned a match without "
-                "valid supporting evidence."
+        elif not valid_chunk_ids:
+            classification = "not_evidenced_in_resume"
+            confidence = 0.0
+            valid_chunk_ids = []
+            guardrail_applied = True
+
+            explanation = (
+                "The classifier did not cite a valid resume "
+                "chunk, so this requirement cannot be "
+                "substantiated from the uploaded resume."
             )
 
         decisions[decision.requirement_id] = {
-            "classification": decision.classification,
-            "confidence": round(
-                decision.confidence,
-                3,
-            ),
+            "classification": classification,
+            "confidence": confidence,
             "supporting_chunk_ids": valid_chunk_ids,
-            "explanation": decision.explanation,
+            "explanation": explanation,
+            "guardrail_applied": guardrail_applied,
         }
 
     expected_ids = {
