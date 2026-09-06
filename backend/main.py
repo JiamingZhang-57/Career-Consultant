@@ -1,10 +1,11 @@
-from uuid import uuid4
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pdf_parser import PdfParsingError, parse_pdf
-from chunking import split_resume_sections
+from chunking import build_resume_evidence_chunks,split_resume_sections
 from job_ingestion import JobPageError, extract_job_content, fetch_job_html
-from vector_store import EMBEDDING_MODEL_NAME, add_chunks, search_chunks
+from vector_store import search_chunks
+from resume_ingestion import ingest_resume
 from schemas import EvidenceRequest, JobUrlRequest, SearchRequest
 
 app = FastAPI(title="Career Intelligence API", version="0.1.0")
@@ -35,6 +36,36 @@ def health_check():
     return {"status": "ok", "service": "career-intelligence-api"}
 
 @app.post(
+    "/resumes",
+    tags=["Resumes"],
+)
+async def upload_resume(
+    file: UploadFile = File(...),
+):
+    filename = file.filename or "uploaded-resume.pdf"
+    file_content = await file.read()
+
+    try:
+        result = ingest_resume(
+            filename=filename,
+            file_content=file_content,
+        )
+    except PdfParsingError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=str(error),
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    return result
+
+
+
+@app.post(
     "/documents/parse",
     include_in_schema=False,
 )
@@ -63,33 +94,7 @@ async def parse_document(
         "chunks": chunks,
     }
 
-@app.post("/documents/index")
-async def index_document(file: UploadFile = File(...), document_type: str = Form("resume")):
-    if document_type not in {"resume", "job"}:
-        raise HTTPException(status_code=400, detail="document_type must be either 'resume' or 'job'.")
-    parsed_document = await parse_document(file)
-    chunks = parsed_document["chunks"]
-    if not chunks:
-        raise HTTPException(status_code=400, detail="No text could be extracted from this document.")
 
-    document_id = str(uuid4())
-    texts = [chunk["text"] for chunk in chunks]
-    
-    ids = [f"{document_id}_{chunk['chunk_id']}"for chunk in chunks]
-    metadatas = [
-        { "document_id": document_id, "document_type": document_type, "filename": parsed_document["filename"], "chunk_id": chunk["chunk_id"],
-        } for chunk in chunks
-                ]
-
-    add_chunks(ids=ids, texts=texts, metadatas=metadatas)
-
-    return {
-        "document_id": document_id,
-        "filename": parsed_document["filename"],
-        "document_type": document_type,
-        "chunk_count": len(chunks),
-        "embedding_model": EMBEDDING_MODEL_NAME
-    }
 
 @app.post("/search", include_in_schema=False)
 def search_documents(request: SearchRequest):
@@ -177,13 +182,13 @@ async def preview_resume_structure(
 ):
     parsed_document = await parse_document(file)
 
-    sections = split_resume_sections(
-        parsed_document["pages"]
-    )
-
+    sections = split_resume_sections(parsed_document["pages"])
+    evidence_chunks = build_resume_evidence_chunks(sections)
     return {
         "filename": parsed_document["filename"],
         "page_count": parsed_document["page_count"],
         "section_count": len(sections),
         "sections": sections,
+        "evidence_chunk_count": len(evidence_chunks),
+        "evidence_chunks": evidence_chunks,
     }
