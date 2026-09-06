@@ -74,8 +74,7 @@ async def index_document(file: UploadFile = File(...), document_type: str = Form
 
     document_id = str(uuid4())
     texts = [chunk["text"] for chunk in chunks]
-    model = get_embedding_model()
-    embeddings = model.encode(texts, normalize_embeddings=True).tolist()
+    
     ids = [f"{document_id}_{chunk['chunk_id']}"for chunk in chunks]
     metadatas = [
         { "document_id": document_id, "document_type": document_type, "filename": parsed_document["filename"], "chunk_id": chunk["chunk_id"],
