@@ -1,8 +1,5 @@
-from vector_store import (
-    get_chunks,
-    search_chunks,
-)
-
+from vector_store import get_chunks, search_chunks
+from gemini_classifier import classify_requirements
 
 def build_evidence_matrix(
     resume_document_id: str,
@@ -113,14 +110,36 @@ def build_evidence_matrix(
                     "category"
                 ],
                 "requirement": requirement_text,
-                "status": "pending_reasoning",
                 "evidence": evidence,
             }
         )
+
+        classification_batch = classify_requirements(
+            results
+        )
+
+        decisions = classification_batch["decisions"]
+
+        for result in results:
+            decision = decisions[result["requirement_id"]]
+
+            result["classification"] = decision[
+                "classification"
+            ]
+            result["confidence"] = decision[
+                "confidence"
+            ]
+            result["supporting_chunk_ids"] = decision[
+                "supporting_chunk_ids"
+            ]
+            result["explanation"] = decision[
+                "explanation"
+            ]
 
     return {
         "resume_document_id": resume_document_id,
         "job_id": job_id,
         "requirement_count": len(results),
+        "classifier_model": classification_batch["model"],
         "results": results,
     }

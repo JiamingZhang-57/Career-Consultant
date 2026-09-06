@@ -21,7 +21,7 @@ MatchClassification = Literal[
 
 class GeminiSettings(BaseSettings):
     gemini_api_key: SecretStr
-    gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_model: str = "gemini-3.5-flash-lite"
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).with_name(".env"),
