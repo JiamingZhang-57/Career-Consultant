@@ -3,10 +3,12 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pdf_parser import PdfParsingError, parse_pdf
 from chunking import build_resume_evidence_chunks,split_resume_sections
-from job_ingestion import JobPageError, extract_job_content, fetch_job_html
+from job_ingestion import JobPageError
+from job_service import ingest_job_url
 from vector_store import search_chunks
 from resume_ingestion import ingest_resume
 from schemas import EvidenceRequest, JobUrlRequest, SearchRequest
+
 
 app = FastAPI(title="Career Intelligence API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000" ], allow_credentials=True, allow_methods=["*"],  allow_headers=["*"])
@@ -140,41 +142,22 @@ def retrieve_requirement_evidence(request: EvidenceRequest):
     return {"requirement": request.requirement, "resume_document_id": request.resume_document_id, "evidence": search_results["matches"]}
 
 
-@app.post("/jobs/from-url/preview")
-async def preview_job_from_url(
+@app.post(
+    "/jobs",
+    tags=["Jobs"],
+)
+async def create_job(
     request: JobUrlRequest,
 ):
     try:
-        final_url, html = await fetch_job_html(request.url)
-        job = extract_job_content(html)
+        return await ingest_job_url(
+            request.url
+        )
     except JobPageError as error:
         raise HTTPException(
             status_code=422,
             detail=str(error),
         ) from error
-
-    if len(job["text"]) < 200:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Unable to extract a job description from this URL. "
-                "Please provide a public company career-page URL."
-            ),
-        )
-
-    chunks = chunk_text(job["text"])
-
-    return {
-        "source_url": final_url,
-        "title": job["title"],
-        "company": job["company"],
-        "location": job["location"],
-        "employment_type": job["employment_type"],
-        "extraction_method": job["extraction_method"],
-        "character_count": len(job["text"]),
-        "chunk_count": len(chunks),
-        "chunks": chunks,
-    }
 
 @app.post("/documents/resume-structure", include_in_schema=False)
 async def preview_resume_structure(
