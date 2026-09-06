@@ -1,6 +1,6 @@
 from pathlib import Path
 from uuid import uuid4
-
+from pydantic import BaseModel, Field
 import chromadb
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +22,12 @@ def get_embedding_model():
     if _embedding_model is None:
         _embedding_model = SentenceTransformer( "all-MiniLM-L6-v2")
     return _embedding_model
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=10)
+    document_id: str | None = None
+    document_type: str | None = None
 
 def chunk_text(text: str, max_chars: int = 1200, overlap: int = 150):
     """
@@ -107,3 +113,33 @@ async def index_document(file: UploadFile = File(...), document_type: str = Form
         "chunk_count": len(chunks),
         "embedding_model": "all-MiniLM-L6-v2"
     }
+
+@app.post("/search")
+def search_documents(request: SearchRequest):
+    """
+    Here the distance indicates the spatial distance between requests and chunks in the embedding space.
+    The similarity lower, more close semantically
+    """
+    model = get_embedding_model()
+    query_embedding = model.encode([request.query], normalize_embeddings=True).tolist()[0]
+    filters = []
+    if request.document_id:
+        filters.append({"document_id": request.document_id})
+    if request.document_type:
+        filters.append({"document_type": request.document_type})
+    where = None
+    if len(filters) == 1:
+        where = filters[0]
+    elif len(filters) > 1:
+        where = {"$and": filters}
+    query_arguments = {"query_embeddings": [query_embedding], "n_results": request.top_k, "include": [ "documents", "metadatas", "distances"]}
+    if where:
+        query_arguments["where"] = where
+    results = chunks_collection.query(**query_arguments)
+    documents = results["documents"][0]
+    metadatas = results["metadatas"][0]
+    distances = results["distances"][0]
+    matches = []
+    for document, metadata, distance in zip(documents, metadatas, distances):
+        matches.append({ "text": document, "metadata": metadata, "distance": distance, "similarity": max(0.0, min(1.0, 1 - distance)) })
+    return {"query": request.query, "result_count": len(matches), "matches": matches}
