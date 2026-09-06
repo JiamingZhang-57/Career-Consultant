@@ -1,10 +1,27 @@
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from pathlib import Path
+from uuid import uuid4
+
+import chromadb
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from sentence_transformers import SentenceTransformer
 import pymupdf
 
 app = FastAPI(title="Career Intelligence API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000" ], allow_credentials=True, allow_methods=["*"],  allow_headers=["*"])
 MAX_FILE_SIZE = 10 * 1024 * 1024
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CHROMA_PATH = PROJECT_ROOT / "data" / "chroma"
+CHROMA_PATH.mkdir(parents=True, exist_ok=True)
+chroma_client = chromadb.PersistentClient(path=str(CHROMA_PATH))
+chunks_collection = chroma_client.get_or_create_collection(name="document_chunks", metadata={"hnsw:space": "cosine"})
+_embedding_model = None
+
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer( "all-MiniLM-L6-v2")
+    return _embedding_model
 
 def chunk_text(text: str, max_chars: int = 1200, overlap: int = 150):
     """
@@ -25,9 +42,11 @@ def chunk_text(text: str, max_chars: int = 1200, overlap: int = 150):
     if current:
         chunks.append(current)
     return [{ "chunk_id": f"chunk_{index + 1:03d}", "text": chunk, "character_count": len(chunk) } for index, chunk in enumerate(chunks)]
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "career-intelligence-api"}
+
 @app.post("/documents/parse")
 async def parse_document(file: UploadFile = File(...)):
     filename = file.filename or "uploaded-file"
@@ -58,4 +77,33 @@ async def parse_document(file: UploadFile = File(...)):
         "pages": pages,
         "chunk_count": len(chunks),
         "chunks": chunks
+    }
+
+@app.post("/documents/index")
+async def index_document(file: UploadFile = File(...), document_type: str = Form("resume")):
+    if document_type not in {"resume", "job"}:
+        raise HTTPException(status_code=400, detail="document_type must be either 'resume' or 'job'.")
+    parsed_document = await parse_document(file)
+    chunks = parsed_document["chunks"]
+    if not chunks:
+        raise HTTPException(status_code=400, detail="No text could be extracted from this document.")
+
+    document_id = str(uuid4())
+    texts = [chunk["text"] for chunk in chunks]
+    model = get_embedding_model()
+    embeddings = model.encode(texts, normalize_embeddings=True).tolist()
+    ids = [f"{document_id}_{chunk['chunk_id']}"for chunk in chunks]
+    metadatas = [
+        { "document_id": document_id, "document_type": document_type, "filename": parsed_document["filename"], "chunk_id": chunk["chunk_id"],
+        } for chunk in chunks
+                ]
+
+    chunks_collection.add(ids=ids, documents=texts, embeddings=embeddings, metadatas=metadatas)
+
+    return {
+        "document_id": document_id,
+        "filename": parsed_document["filename"],
+        "document_type": document_type,
+        "chunk_count": len(chunks),
+        "embedding_model": "all-MiniLM-L6-v2"
     }
