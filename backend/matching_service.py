@@ -1,5 +1,6 @@
 from vector_store import get_chunks, search_chunks
 from gemini_classifier import classify_requirements
+from scoring import calculate_job_score
 
 def build_evidence_matrix(
     resume_document_id: str,
@@ -138,11 +139,14 @@ def build_evidence_matrix(
             result["guardrail_applied"] = decision[
                 "guardrail_applied"
             ]
-
+    score_summary = calculate_job_score(
+        results
+    )
     return {
         "resume_document_id": resume_document_id,
         "job_id": job_id,
         "requirement_count": len(results),
         "classifier_model": classification_batch["model"],
+        "score_summary": score_summary,
         "results": results,
     }
