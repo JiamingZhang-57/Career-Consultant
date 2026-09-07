@@ -12,18 +12,9 @@ from pydantic_settings import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-LlmProvider = Literal[
-    "gemini",
-    "openai",
-    "deepseek",
-    "qwen",
-]
-
 
 class Settings(BaseSettings):
     career_data_dir: str = "./data"
-
-    default_llm_provider: LlmProvider = "gemini"
 
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.5-flash-lite"
