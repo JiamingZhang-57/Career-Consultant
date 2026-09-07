@@ -1,15 +1,10 @@
 import json
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
-
 from google import genai
 from google.genai import types
-from pydantic import BaseModel, Field, SecretStr
-from pydantic_settings import (
-    BaseSettings,
-    SettingsConfigDict,
-)
+from pydantic import BaseModel, Field
+from config import get_settings
 
 
 MatchClassification = Literal[
@@ -17,18 +12,6 @@ MatchClassification = Literal[
     "partial_match",
     "not_evidenced_in_resume",
 ]
-
-
-class GeminiSettings(BaseSettings):
-    gemini_api_key: SecretStr
-    gemini_model: str = "gemini-3.5-flash-lite"
-
-    model_config = SettingsConfigDict(
-        env_file=Path(__file__).with_name(".env"),
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
 
 class RequirementDecision(BaseModel):
     requirement_id: str
@@ -44,15 +27,14 @@ class RequirementDecision(BaseModel):
 class ClassificationBatch(BaseModel):
     decisions: list[RequirementDecision]
 
-
-@lru_cache
-def get_settings() -> GeminiSettings:
-    return GeminiSettings()
-
-
 @lru_cache
 def get_gemini_client() -> genai.Client:
     settings = get_settings()
+
+    if settings.gemini_api_key is None:
+        raise RuntimeError(
+            "GEMINI_API_KEY is not configured."
+        )
 
     return genai.Client(
         api_key=(

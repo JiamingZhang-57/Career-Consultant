@@ -4,10 +4,8 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from analysis_cache import get_analysis
-from gemini_classifier import (
-    get_gemini_client,
-    get_settings,
-)
+from config import get_settings
+from gemini_classifier import get_gemini_client
 from vector_store import search_chunks
 
 

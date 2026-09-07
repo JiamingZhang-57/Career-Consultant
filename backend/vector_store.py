@@ -1,13 +1,11 @@
-from pathlib import Path
-
+from config import get_settings
 import chromadb
 from sentence_transformers import SentenceTransformer
 
 
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CHROMA_PATH = PROJECT_ROOT / "data" / "chroma"
+settings = get_settings()
+CHROMA_PATH = (settings.resolved_data_dir / "chroma")
 CHROMA_PATH.mkdir(parents=True, exist_ok=True)
 
 _chroma_client = chromadb.PersistentClient(
