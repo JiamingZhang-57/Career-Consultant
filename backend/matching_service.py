@@ -115,30 +115,30 @@ def build_evidence_matrix(
             }
         )
 
-        classification_batch = classify_requirements(
-            results
-        )
+    classification_batch = classify_requirements(
+        results
+    )
 
-        decisions = classification_batch["decisions"]
+    decisions = classification_batch["decisions"]
 
-        for result in results:
-            decision = decisions[result["requirement_id"]]
+    for result in results:
+        decision = decisions[result["requirement_id"]]
 
-            result["classification"] = decision[
-                "classification"
-            ]
-            result["confidence"] = decision[
-                "confidence"
-            ]
-            result["supporting_chunk_ids"] = decision[
-                "supporting_chunk_ids"
-            ]
-            result["explanation"] = decision[
-                "explanation"
-            ]
-            result["guardrail_applied"] = decision[
-                "guardrail_applied"
-            ]
+        result["classification"] = decision[
+            "classification"
+        ]
+        result["confidence"] = decision[
+            "confidence"
+        ]
+        result["supporting_chunk_ids"] = decision[
+            "supporting_chunk_ids"
+        ]
+        result["explanation"] = decision[
+            "explanation"
+        ]
+        result["guardrail_applied"] = decision[
+            "guardrail_applied"
+        ]
     score_summary = calculate_job_score(
         results
     )
