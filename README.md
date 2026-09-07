@@ -2,7 +2,7 @@
 
 
 
-This is a full-stack conversational AI application that analyses a candidate's resume against multiple job descriptions. The system retrieves evidence from the resume, evaluates individual job requirements, calculates weighted alignment scores, compares multiple roles, and supports grounded career-related questions. This project implements the \*\*Career Intelligence Assistant\*\* option of the take-home assignment.
+This is a full-stack conversational AI application that analyses a candidate's resume against multiple job descriptions. The system retrieves evidence from the resume, evaluates individual job requirements, calculates weighted alignment scores, compares multiple roles, and supports grounded career-related questions.
 
 
 
@@ -392,9 +392,9 @@ Docker and PostgreSQL are not required for the current version.
 
 ```bash
 
-git clone https://github.com/NP-Assignments-Labs/fde-jiaming-zhang-dc0872ad.git
+git clone https://github.com/JiamingZhang-57/Career-Consultant.git
 
-cd fde-jiaming-zhang-dc0872ad
+cd Career-Consultant
 
 ```
 
