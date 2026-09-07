@@ -4,6 +4,10 @@ __pycache__/
 .venv/
 *.egg-info/
 
+.pytest_cache/
+.coverage
+htmlcov/
+
 # Environment variables
 .env
 .env.*

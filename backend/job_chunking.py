@@ -9,6 +9,7 @@ JOB_SECTION_ALIASES = {
         "role overview",
         "the role",
         "about the job",
+        "role description"
     },
 
     "required_behaviours": {
@@ -32,6 +33,7 @@ JOB_SECTION_ALIASES = {
         "what you will do",
         "your responsibilities",
         "your role",
+        "what you will be doing"
     },
     "required_qualifications": {
         "requirements",
@@ -40,6 +42,7 @@ JOB_SECTION_ALIASES = {
         "what we are looking for",
         "what you'll bring",
         "what you will bring",
+        "what you need",
         "about you",
         "essential skills",
         "essential qualifications",
@@ -76,6 +79,7 @@ JOB_SECTION_ALIASES = {
     },
     "interview_process": {
         "interview process",
+        "process",
         "hiring process",
         "recruitment process",
         "what to expect",

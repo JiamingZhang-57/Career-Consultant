@@ -17,6 +17,25 @@ export interface ResumeResponse {
   embedding_model: string;
 }
 
+export interface ChatHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatSource {
+  source_id: string;
+  source_type: string;
+  section_type: string;
+  text: string;
+}
+
+export interface ChatResponse {
+  answer: string;
+  sources: ChatSource[];
+  model: string;
+  guardrail_applied: boolean;
+}
+
 export interface JobResponse {
   job_id: string;
   source_url: string;
@@ -142,4 +161,29 @@ export async function createAnalysis(
   );
 
   return readResponse<AnalysisResponse>(response);
+}
+
+export async function sendChatMessage(
+  resumeDocumentId: string,
+  jobId: string,
+  question: string,
+  history: ChatHistoryMessage[],
+): Promise<ChatResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/chat`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        resume_document_id: resumeDocumentId,
+        job_id: jobId,
+        question,
+        history,
+      }),
+    },
+  );
+
+  return readResponse<ChatResponse>(response);
 }

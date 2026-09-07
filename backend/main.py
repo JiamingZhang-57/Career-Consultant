@@ -1,4 +1,4 @@
-
+from analysis_cache import save_analysis
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pdf_parser import PdfParsingError, parse_pdf
@@ -8,7 +8,8 @@ from job_service import ingest_job_url
 from vector_store import search_chunks
 from resume_ingestion import ingest_resume
 from matching_service import build_evidence_matrix
-from schemas import AnalysisRequest, EvidenceRequest, JobUrlRequest, SearchRequest
+from schemas import AnalysisRequest, EvidenceRequest, JobUrlRequest, ChatRequest, SearchRequest
+from chat_service import answer_career_question
 
 app = FastAPI(title="Career Intelligence API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000" ], allow_credentials=True, allow_methods=["*"],  allow_headers=["*"])
@@ -184,15 +185,45 @@ def create_analysis(
     request: AnalysisRequest,
 ):
     try:
-        return build_evidence_matrix(
+        analysis = build_evidence_matrix(
             resume_document_id=(
                 request.resume_document_id
             ),
             job_id=request.job_id,
             top_k=request.top_k,
         )
+
+        save_analysis(analysis)
+
+        return analysis
     except ValueError as error:
         raise HTTPException(
             status_code=404,
+            detail=str(error),
+        ) from error
+
+@app.post(
+    "/chat",
+    tags=["Chat"],
+)
+def chat(
+    request: ChatRequest,
+):
+    try:
+        return answer_career_question(
+            resume_document_id=(
+                request.resume_document_id
+            ),
+            job_id=request.job_id,
+            question=request.question,
+            history=[
+                message.model_dump()
+                for message in request.history
+            ],
+        )
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=409,
             detail=str(error),
         ) from error

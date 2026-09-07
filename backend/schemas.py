@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-
+from typing import Literal
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1)
@@ -24,4 +24,24 @@ class AnalysisRequest(BaseModel):
         default=3,
         ge=1,
         le=5,
+    )
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(
+        min_length=1,
+        max_length=2000,
+    )
+
+
+class ChatRequest(BaseModel):
+    resume_document_id: str
+    job_id: str
+    question: str = Field(
+        min_length=2,
+        max_length=1000,
+    )
+    history: list[ChatMessage] = Field(
+        default_factory=list,
+        max_length=10,
     )
