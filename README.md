@@ -392,15 +392,12 @@ Docker and PostgreSQL are not required for the current version.
 
 ```bash
 
-git clone https://github.com/<username>/<repository>.git
+git clone https://github.com/NP-Assignments-Labs/fde-jiaming-zhang-dc0872ad.git
 
-cd <repository>
+cd fde-jiaming-zhang-dc0872ad
 
 ```
 
-
-
-Replace the placeholder URL with the actual repository URL.
 
 
 
