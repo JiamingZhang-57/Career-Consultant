@@ -7,18 +7,20 @@ import {
 
 import {
   AnalysisResponse,
+  JobPreviewResponse,
   JobResponse,
   MatchClassification,
   ResumeResponse,
   createAnalysis,
-  createJob,
+  confirmJob,
+  previewJob,
   uploadResume,
   ChatSource,
   sendChatMessage
 } from "../lib/api";
 
 type ApiStatus = "checking" | "online" | "offline";
-type BusyState = "resume" | "analysis" | "chat"| null;
+type BusyState = "resume" | "job" | "analysis" | "chat"| null;
 type DisplayClassification = | MatchClassification | "user_confirmed_gap";
 interface ComparedJob {job: JobResponse; analysis: AnalysisResponse}
 interface JobDisplayDetails {title: string; company: string}
@@ -61,6 +63,8 @@ export default function Home() {
     useState("");
 
   const [jobUrl, setJobUrl] = useState("");
+  const [jobPreview, setJobPreview] =
+    useState<JobPreviewResponse | null>(null);
 
   const [job, setJob] =
     useState<JobResponse | null>(null);
@@ -225,14 +229,36 @@ export default function Home() {
     }
   }
 
+  async function handleJobPreview() {
+    if (!jobUrl.trim()) {
+      setError("Please enter an official job URL.");
+      return;
+    }
+
+    setBusy("job");
+    setError(null);
+    setJobPreview(null);
+    setJob(null);
+    setAnalysis(null);
+
+    try {
+      const preview = await previewJob(jobUrl.trim());
+      setJobPreview(preview);
+    } catch (previewError) {
+      setError(getErrorMessage(previewError));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleAnalysis() {
     if (!resume) {
       setError("Please choose a resume PDF first.");
       return;
     }
 
-    if (!jobUrl.trim()) {
-      setError("Please enter an official job URL.");
+    if (!job && !jobPreview) {
+      setError("Please fetch and review the job first.");
       return;
     }
 
@@ -244,9 +270,7 @@ export default function Home() {
       let currentJob = job;
 
       if (!currentJob) {
-        currentJob = await createJob(
-          jobUrl.trim(),
-        );
+        currentJob = await confirmJob(jobPreview!);
 
         setJob(currentJob);
       }
@@ -437,6 +461,18 @@ export default function Home() {
                 <p>
                   {resume.chunk_count} evidence chunks
                 </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Extraction: {resume.extraction_method}
+                </p>
+
+                {resume.extraction_warnings.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-300">
+                    {resume.extraction_warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
           </section>
@@ -464,11 +500,97 @@ export default function Home() {
               className="mt-5 block w-full rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm outline-none focus:border-cyan-500 disabled:cursor-wait disabled:opacity-50"
               onChange={(event) => {
                 setJobUrl(event.target.value);
+                setJobPreview(null);
                 setJob(null);
                 setChatQuestion("");
                 setAnalysis(null);
               }}
             />
+
+            <button
+              type="button"
+              disabled={busy !== null || !jobUrl.trim()}
+              onClick={handleJobPreview}
+              className="mt-3 rounded-lg border border-cyan-600 px-4 py-2 text-sm font-medium text-cyan-300 hover:bg-cyan-950 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy === "job" ? "Fetching job..." : "Fetch and review job"}
+            </button>
+
+            {jobPreview && !job && (
+              <div className="mt-4 rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm text-slate-300">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-cyan-300">
+                    Review extracted job
+                  </p>
+                  <span className="rounded-full bg-slate-950 px-3 py-1 text-xs">
+                    Extraction quality {jobPreview.extraction_quality.score}/100
+                  </span>
+                </div>
+
+                <p className="mt-2 text-xs text-slate-400">
+                  Source: {jobPreview.source_platform} · {jobPreview.extraction_method}
+                </p>
+
+                {[...jobPreview.extraction_quality.issues, ...jobPreview.extraction_quality.warnings].length > 0 && (
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-amber-300">
+                    {[...jobPreview.extraction_quality.issues, ...jobPreview.extraction_quality.warnings].map((message) => (
+                      <li key={message}>{message}</li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="mt-4 grid gap-3">
+                  <label className="text-xs text-slate-400">
+                    Job title
+                    <input
+                      type="text"
+                      value={jobPreview.title}
+                      className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm text-white"
+                      onChange={(event) =>
+                        setJobPreview({
+                          ...jobPreview,
+                          title: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+
+                  <label className="text-xs text-slate-400">
+                    Company
+                    <input
+                      type="text"
+                      value={jobPreview.company}
+                      className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm text-white"
+                      onChange={(event) =>
+                        setJobPreview({
+                          ...jobPreview,
+                          company: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+
+                  <label className="text-xs text-slate-400">
+                    Job description
+                    <textarea
+                      rows={14}
+                      value={jobPreview.text}
+                      className="mt-1 block w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm leading-6 text-white"
+                      onChange={(event) =>
+                        setJobPreview({
+                          ...jobPreview,
+                          text: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+
+                <p className="mt-3 text-xs text-slate-400">
+                  Keep headings such as Requirements, Responsibilities and Nice to have so requirements can be classified correctly.
+                </p>
+              </div>
+            )}
 
             {job && (
               <div className="mt-4 rounded-lg bg-slate-800 p-4 text-sm text-slate-300">
@@ -540,19 +662,19 @@ export default function Home() {
               </h2>
 
               <p className="mt-1 text-sm text-slate-400">
-                The job page will be fetched and compared
-                with the selected resume automatically.
+                Review the extracted job first, then compare
+                it with the selected resume.
               </p>
             </div>
 
             <button
               type="button"
-              disabled={busy !== null}
+              disabled={busy !== null || (!job && !jobPreview)}
               onClick={handleAnalysis}
               className="rounded-lg bg-emerald-400 px-5 py-3 font-semibold text-slate-950 disabled:cursor-wait disabled:opacity-50"
             >
               {busy === "analysis"
-                ? "Fetching job and analysing..."
+                ? "Analysing..."
                 : "Analyse match"}
             </button>
           </div>

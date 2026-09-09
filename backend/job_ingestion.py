@@ -119,6 +119,72 @@ async def fetch_job_html(url: str) -> tuple[str, str]:
     raise JobPageError("The website returned too many redirects.")
 
 
+async def fetch_public_json(url: str) -> tuple[str, dict]:
+    """Fetch JSON from a public HTTPS endpoint with SSRF controls."""
+    current_url = url
+    timeout = httpx.Timeout(timeout=10.0, connect=5.0)
+
+    async with httpx.AsyncClient(
+        headers={
+            "Accept": "application/json",
+            "User-Agent": (
+                "Mozilla/5.0 CareerIntelligenceAssistant/0.1"
+            ),
+        },
+        timeout=timeout,
+        follow_redirects=False,
+    ) as client:
+        for _ in range(MAX_REDIRECTS + 1):
+            await validate_public_url(current_url)
+
+            try:
+                response = await client.get(current_url)
+            except httpx.HTTPError as error:
+                raise JobPageError(
+                    f"Unable to access the job API: {error}"
+                ) from error
+
+            if response.is_redirect:
+                location = response.headers.get("location")
+
+                if not location:
+                    raise JobPageError(
+                        "The job API returned an invalid redirect."
+                    )
+
+                current_url = urljoin(current_url, location)
+                continue
+
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as error:
+                raise JobPageError(
+                    f"The job API returned HTTP "
+                    f"{response.status_code}."
+                ) from error
+
+            if len(response.content) > MAX_HTML_SIZE:
+                raise JobPageError(
+                    "The job API response is larger than the 2 MB limit."
+                )
+
+            try:
+                payload = response.json()
+            except (json.JSONDecodeError, ValueError) as error:
+                raise JobPageError(
+                    "The job API returned invalid JSON."
+                ) from error
+
+            if not isinstance(payload, dict):
+                raise JobPageError(
+                    "The job API returned an unexpected response."
+                )
+
+            return current_url, payload
+
+    raise JobPageError("The job API returned too many redirects.")
+
+
 def find_job_posting(value):
     if isinstance(value, dict):
         item_type = value.get("@type")

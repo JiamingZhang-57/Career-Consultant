@@ -1,0 +1,10 @@
+[
+  {
+    "case_id": "replace-with-case-id",
+    "requirement": "Paste one job requirement here.",
+    "resume_evidence": ["Paste the retrieved resume evidence here."],
+    "expected": "partial_match",
+    "predicted": "replace-with-model-output",
+    "reviewer_notes": "A human reviewer should explain the expected label."
+  }
+]

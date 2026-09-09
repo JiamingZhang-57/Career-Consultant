@@ -1,6 +1,10 @@
 from vector_store import get_chunks, search_chunks
 from gemini_classifier import classify_requirements
 from scoring import calculate_job_score
+from requirement_analysis import (
+    analyse_requirement,
+    build_requirement_retrieval_text,
+)
 
 def build_evidence_matrix(
     resume_document_id: str,
@@ -64,9 +68,14 @@ def build_evidence_matrix(
         requirement_text = requirement_metadata[
             "source_text"
         ]
+        requirement_analysis = analyse_requirement(requirement_text)
+        retrieval_query = build_requirement_retrieval_text(
+            requirement_text,
+            requirement_analysis,
+        )
 
         matches = search_chunks(
-            query=requirement_text,
+            query=retrieval_query,
             top_k=top_k,
             where=resume_filter,
         )
@@ -111,6 +120,17 @@ def build_evidence_matrix(
                     "category"
                 ],
                 "requirement": requirement_text,
+                "material_criteria": requirement_analysis[
+                    "material_criteria"
+                ],
+                "requirement_constraints": {
+                    "skills": requirement_analysis["canonical_skills"],
+                    "years": requirement_analysis["years_constraints"],
+                    "scale": requirement_analysis["scale_constraints"],
+                    "industries": requirement_analysis[
+                        "industry_constraints"
+                    ],
+                },
                 "evidence": evidence,
             }
         )

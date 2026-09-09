@@ -195,3 +195,41 @@ def test_chat_rejects_empty_question():
     )
 
     assert response.status_code == 422
+
+
+def test_job_preview_endpoint(monkeypatch):
+    expected = {
+        "source_url": "https://example.com/job",
+        "title": "ML Engineer",
+        "company": "Example",
+        "location": "Remote",
+        "employment_type": "Full-time",
+        "text": "Requirements\n" + "Python experience. " * 20,
+        "extraction_method": "json_ld",
+        "source_platform": "generic",
+        "extraction_quality": {
+            "score": 80,
+            "status": "good",
+            "required_requirement_count": 1,
+            "preferred_requirement_count": 0,
+            "matching_section_count": 1,
+            "issues": [],
+            "warnings": [],
+        },
+        "sections": [],
+        "requirements": [],
+    }
+
+    async def fake_preview_job_url(url: str):
+        assert url == "https://example.com/job"
+        return expected
+
+    monkeypatch.setattr(main, "preview_job_url", fake_preview_job_url)
+
+    response = client.post(
+        "/jobs/preview",
+        json={"url": "https://example.com/job"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == expected

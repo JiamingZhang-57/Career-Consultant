@@ -56,6 +56,12 @@ def build_classification_prompt(
                 "requirement_type": result[
                     "requirement_type"
                 ],
+                "material_criteria": result.get(
+                    "material_criteria", []
+                ),
+                "requirement_constraints": result.get(
+                    "requirement_constraints", {}
+                ),
                 "evidence": [
                     {
                         "chunk_id": item["chunk_id"],
@@ -103,6 +109,12 @@ Additional rules:
 - Never invent candidate experience.
 - Never use outside knowledge about the candidate.
 - Do not treat retrieval similarity as a match score.
+- Evaluate every material criterion separately before choosing the final label.
+- A strong match must support every material criterion, including explicit
+  years, scale and industry constraints. Related technology alone is not
+  enough to satisfy an explicit constraint.
+- Skill aliases and related concepts are retrieval hints only. They are not
+  proof that the candidate has the required skill.
 - Use only chunk IDs provided for that requirement.
 - A strong or partial match must cite at least one supporting chunk.
 - For not_evidenced_in_resume, return no supporting chunk IDs.

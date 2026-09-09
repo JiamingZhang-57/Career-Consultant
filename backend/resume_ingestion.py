@@ -67,6 +67,12 @@ def ingest_resume(
                 for number in chunk["page_numbers"]
             ),
             "source_text": chunk["source_text"],
+            "evidence_kind": chunk["evidence_kind"],
+            "entry_heading": chunk["entry_heading"],
+            "canonical_skills": ",".join(
+                chunk["canonical_skills"]
+            ),
+            "date_ranges": ",".join(chunk["date_ranges"]),
             "use_for_matching": True,
         }
         for chunk in indexable_chunks
@@ -86,5 +92,8 @@ def ingest_resume(
         "section_count": len(sections),
         "chunk_count": len(indexable_chunks),
         "embedding_model": EMBEDDING_MODEL_NAME,
+        "extraction_method": parsed_document["extraction_method"],
+        "ocr_page_numbers": parsed_document["ocr_page_numbers"],
+        "extraction_warnings": parsed_document["extraction_warnings"],
         "chunks": indexable_chunks,
     }

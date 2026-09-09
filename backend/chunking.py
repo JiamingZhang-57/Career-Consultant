@@ -1,5 +1,7 @@
 import re
 
+from resume_structure import extract_resume_structure
+
 
 RESUME_SECTION_ALIASES = {
     "summary": {
@@ -12,13 +14,18 @@ RESUME_SECTION_ALIASES = {
     },
 
     "skills": {
-    "skill",
-    "skills",
-    "technical skills",
-    "core skills",
-    "core competencies",
-    "technologies",
-    "tools and technologies"},
+        "skill",
+        "skills",
+        "technical skills",
+        "core skills",
+        "core competencies",
+        "technologies",
+        "tools and technologies",
+        "technical expertise",
+        "areas of expertise",
+        "programming languages",
+        "software and tools",
+    },
 
     "work_experience": {
         "experience",
@@ -27,6 +34,8 @@ RESUME_SECTION_ALIASES = {
         "employment experience",
         "employment history",
         "career history",
+        "professional appointments",
+        "industry experience",
     },
 
     "projects": {
@@ -35,12 +44,14 @@ RESUME_SECTION_ALIASES = {
         "personal projects",
         "research projects",
         "academic projects",
+        "portfolio",
     },
 
     "education": {
         "education",
         "academic background",
         "academic qualifications",
+        "qualifications",
     },
 
     "certifications": {
@@ -67,7 +78,24 @@ RESUME_SECTION_ALIASES = {
         "research experience",
         "selected research",
         "research projects",
-    }
+    },
+
+    "leadership": {
+        "leadership",
+        "leadership experience",
+        "positions of responsibility",
+    },
+
+    "volunteering": {
+        "volunteering",
+        "volunteer experience",
+        "community involvement",
+    },
+
+    "languages": {
+        "languages",
+        "language skills",
+    },
 }
 
 
@@ -88,6 +116,19 @@ def detect_resume_section(line: str) -> str | None:
             return section_type
 
     return None
+
+
+def detect_inline_resume_section(line: str) -> tuple[str | None, str]:
+    direct_match = detect_resume_section(line)
+    if direct_match:
+        return direct_match, ""
+
+    heading, separator, remainder = line.partition(":")
+    if not separator:
+        return None, ""
+
+    inline_match = detect_resume_section(heading)
+    return inline_match, remainder.strip() if inline_match else ""
 
 
 def clean_resume_line(line: str) -> str:
@@ -132,13 +173,18 @@ def split_resume_sections(
     for page in pages:
         page_number = page["page_number"]
 
-        for raw_line in page["text"].splitlines():
-            line = clean_resume_line(raw_line)
+        page_lines = page.get("lines") or [
+            {"text": raw_line}
+            for raw_line in page["text"].splitlines()
+        ]
+
+        for page_line in page_lines:
+            line = clean_resume_line(page_line["text"])
 
             if not line:
                 continue
 
-            detected_type = detect_resume_section(line)
+            detected_type, inline_content = detect_inline_resume_section(line)
 
             if detected_type:
                 append_section(
@@ -151,8 +197,8 @@ def split_resume_sections(
 
                 current_type = detected_type
                 current_heading = line
-                current_lines = []
-                current_pages = set()
+                current_lines = [inline_content] if inline_content else []
+                current_pages = {page_number} if inline_content else set()
                 continue
 
             current_lines.append(line)
@@ -178,7 +224,11 @@ RESUME_SECTION_LABELS = {
     "certifications": "Certifications",
     "publications": "Publications",
     "awards": "Awards and achievements",
-    "research_experience": "Research experience"}
+    "research_experience": "Research experience",
+    "leadership": "Leadership",
+    "volunteering": "Volunteering",
+    "languages": "Languages",
+}
 
 
 def split_lines_by_size(
@@ -380,6 +430,7 @@ def build_resume_evidence_chunks(
         if section_type in {
             "work_experience",
             "research_experience",
+            "projects",
         }:
             text_groups = split_experience_entries(
                 section["text"]
@@ -391,9 +442,22 @@ def build_resume_evidence_chunks(
 
         for source_text in text_groups:
             chunk_number = len(chunks) + 1
+            structure = extract_resume_structure(
+                section_type,
+                source_text,
+            )
+
+            skill_context = ""
+            if structure["canonical_skills"]:
+                skill_context = (
+                    "\nExplicit skill mentions: "
+                    + ", ".join(structure["canonical_skills"])
+                )
 
             retrieval_text = (
                 f"Resume section: {section_label}\n"
+                f"Evidence type: {structure['evidence_kind']}"
+                f"{skill_context}\n"
                 f"{source_text}"
             )
 
@@ -418,6 +482,7 @@ def build_resume_evidence_chunks(
                         section_type != "header"
                     ),
                     "character_count": len(source_text),
+                    **structure,
                 }
             )
 

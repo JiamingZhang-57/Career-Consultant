@@ -15,6 +15,9 @@ export interface ResumeResponse {
   section_count: number;
   chunk_count: number;
   embedding_model: string;
+  extraction_method: string;
+  ocr_page_numbers: number[];
+  extraction_warnings: string[];
 }
 
 export interface ChatHistoryMessage {
@@ -46,6 +49,31 @@ export interface JobResponse {
   section_count: number;
   requirement_count: number;
   embedding_model: string;
+  extraction_method: string;
+  source_platform: string;
+  extraction_quality: JobExtractionQuality;
+}
+
+export interface JobExtractionQuality {
+  score: number;
+  status: "good" | "warning" | "rejected";
+  required_requirement_count: number;
+  preferred_requirement_count: number;
+  matching_section_count: number;
+  issues: string[];
+  warnings: string[];
+}
+
+export interface JobPreviewResponse {
+  source_url: string;
+  title: string;
+  company: string;
+  location: string;
+  employment_type: string;
+  text: string;
+  extraction_method: string;
+  source_platform: string;
+  extraction_quality: JobExtractionQuality;
 }
 
 export interface Evidence {
@@ -186,4 +214,38 @@ export async function sendChatMessage(
   );
 
   return readResponse<ChatResponse>(response);
+}
+
+export async function previewJob(
+  url: string,
+): Promise<JobPreviewResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/jobs/preview`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url }),
+    },
+  );
+
+  return readResponse<JobPreviewResponse>(response);
+}
+
+export async function confirmJob(
+  preview: JobPreviewResponse,
+): Promise<JobResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/jobs/confirm`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(preview),
+    },
+  );
+
+  return readResponse<JobResponse>(response);
 }

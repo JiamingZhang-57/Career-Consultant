@@ -4,11 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pdf_parser import PdfParsingError, parse_pdf
 from chunking import build_resume_evidence_chunks,split_resume_sections
 from job_ingestion import JobPageError
-from job_service import ingest_job_url
+from job_service import ingest_job_content, ingest_job_url, preview_job_url
 from vector_store import search_chunks
 from resume_ingestion import ingest_resume
 from matching_service import build_evidence_matrix
-from schemas import AnalysisRequest, EvidenceRequest, JobUrlRequest, ChatRequest, SearchRequest
+from schemas import AnalysisRequest, ChatRequest, EvidenceRequest, JobContentRequest, JobUrlRequest, SearchRequest
 from chat_service import answer_career_question
 
 app = FastAPI(title="Career Intelligence API", version="0.1.0")
@@ -141,6 +141,38 @@ def retrieve_requirement_evidence(request: EvidenceRequest):
         document_type="resume")
     search_results = search_documents(search_request)
     return {"requirement": request.requirement, "resume_document_id": request.resume_document_id, "evidence": search_results["matches"]}
+
+
+@app.post(
+    "/jobs/preview",
+    tags=["Jobs"],
+)
+async def preview_job(
+    request: JobUrlRequest,
+):
+    try:
+        return await preview_job_url(request.url)
+    except JobPageError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+
+@app.post(
+    "/jobs/confirm",
+    tags=["Jobs"],
+)
+def confirm_job(
+    request: JobContentRequest,
+):
+    try:
+        return ingest_job_content(request.model_dump())
+    except JobPageError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
 
 
 @app.post(

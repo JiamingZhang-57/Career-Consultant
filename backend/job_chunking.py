@@ -1,5 +1,7 @@
 import re
 
+from requirement_analysis import analyse_requirement, build_requirement_retrieval_text
+
 
 JOB_SECTION_ALIASES = {
     "role_overview": {
@@ -288,6 +290,7 @@ def build_job_requirements(
 
         for item in items:
             requirement_number = len(requirements) + 1
+            analysis = analyse_requirement(item)
 
             requirements.append(
                 {
@@ -302,8 +305,10 @@ def build_job_requirements(
                     "retrieval_text": (
                         f"Job requirement category: "
                         f"{section['section_type']}\n"
-                        f"Requirement: {item}"
+                        "Requirement: "
+                        f"{build_requirement_retrieval_text(item, analysis)}"
                     ),
+                    **analysis,
                 }
             )
 

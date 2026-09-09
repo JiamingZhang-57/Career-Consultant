@@ -9,6 +9,16 @@ REQUIREMENT_WEIGHTS = {
     "preferred": 1.0,
 }
 
+CATEGORY_WEIGHTS = {
+    "required_qualifications": 1.2,
+    "technical_skills": 1.2,
+    "responsibilities": 1.0,
+    "required_behaviours": 0.9,
+    "preferred_qualifications": 1.0,
+}
+
+CONSTRAINT_WEIGHT = 1.1
+
 
 def percentage(
     earned: float,
@@ -53,6 +63,20 @@ def calculate_job_score(
             requirement_type,
             1.0,
         )
+        category_weight = CATEGORY_WEIGHTS.get(
+            result.get("category"),
+            1.0,
+        )
+        constraints = result.get("requirement_constraints") or {}
+        has_explicit_constraint = any(
+            constraints.get(name)
+            for name in ("years", "scale", "industries")
+        )
+        constraint_weight = (
+            CONSTRAINT_WEIGHT if has_explicit_constraint else 1.0
+        )
+        requirement_weight *= category_weight * constraint_weight
+        result["score_weight"] = round(requirement_weight, 3)
 
         earned = match_value * requirement_weight
 
@@ -100,6 +124,8 @@ def calculate_job_score(
             "requirement_weights": (
                 REQUIREMENT_WEIGHTS
             ),
+            "category_weights": CATEGORY_WEIGHTS,
+            "explicit_constraint_weight": CONSTRAINT_WEIGHT,
             "confidence_used_in_score": False,
         },
     }
